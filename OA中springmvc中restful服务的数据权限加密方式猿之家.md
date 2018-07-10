@@ -1,0 +1,21 @@
+---
+title: OA中springmvc中restful服务的数据权限加密方式
+date: 2017-11-03 13:06:32
+categories: "开发"
+tags:
+	- Java
+	- 技术
+	- JSON
+
+---
+
+# restful中数据权限加密方式有很多种，特别是针对于request json的方式加密，这里详细介绍了SOA中针对于get、post数据加密方式，保证数据传输中的安全性： #
+
+Java代码
+
+    @Component("dataSignInterceptor")public class DataSignInterceptor implements MethodInterceptor {@Autowiredprivate SoaServiceConfigService soaServiceConfigService;@Autowiredprivate SoaAppSecretService soaAppSecretService;@Autowiredprivate SoaServiceApplyService soaServiceApplyService; public Object invoke(MethodInvocation mi) throws Throwable {//TODO 此处应该先查询缓存 //获取所有未管控的服务列表 List<SoaServiceConfig> soaServiceConfigList = soaServiceConfigService.findNoSwitchList(); if(soaServiceConfigList != null){//放入缓存 }Object[] ars = mi.getArguments();// 判断该方法是否加了DataSign 注解 if (mi.getMethod().isAnnotationPresent(DataSign.class)) {// 获取拦截方法的请求参数 HttpServletRequest request = null;JSONObject jsonBody = null;Map<String, String> reqGetParamMap = null; // 客户端传递的参数信息 Map<String, String> reqPostParamMap = null; // 客户端传递的参数信息 Map<String, String> resultParamMap = new HashMap<String, String>(); for (Object obj : ars) {if (obj instanceof HttpServletRequest) {request = (HttpServletRequest) obj;reqGetParamMap = (Map<String, String>) request.getParameterMap();Set keSet = reqGetParamMap.entrySet(); for (Iterator itr = keSet.iterator(); itr.hasNext();) {Map.Entry me = (Map.Entry) itr.next();String key = me.getKey().toString();Object ov = me.getValue();String[] value =new String[1]; if(ov instanceof String[]){value=(String[])ov;}else{value[0]=ov.toString();}resultParamMap.put(key, value[0]);}} else if (obj instanceof JSONObject) {jsonBody = (JSONObject) obj;ObjectMapper objMap = new ObjectMapper();reqPostParamMap = objMap.readValue(jsonBody.toString(), Map.class);resultParamMap = reqPostParamMap;}}String serviceUrl = request.getServletPath(); if(StringUtils.isNotEmpty(serviceUrl)){serviceUrl = serviceUrl.substring(serviceUrl.indexOf("/",2));}//TODO 应该从缓存取，当前先这样处理 //如果所有未管控的服务列表中包含用户请求的服务连接，则不需要再进行管控，直接放开服务控制权 if(soaServiceConfigList != null){for(SoaServiceConfig soaServiceConfig : soaServiceConfigList){if(serviceUrl.equals(soaServiceConfig.getServiceUrl())){return mi.proceed();}}}String reqSign = resultParamMap.get("sign");// 客户端传递的签名认证信息 // 验证签名不能为空 if (StringUtils.isEmpty(reqSign)) {return new ResponseVO(DataSignEnum.SIGN_NOT_NULL.getCode(), DataSignEnum.SIGN_NOT_NULL.getMessage(), null);}String appname = resultParamMap.get("appname");// 验证应用名不能为空 if (StringUtils.isEmpty(appname)) {return new ResponseVO(DataSignEnum.APPNAME_NOT_NULL.getCode(),DataSignEnum.APPNAME_NOT_NULL.getMessage(), null);}SoaServiceApply soaServiceApply = soaServiceApplyService.getServiceApplyByAppname(serviceUrl, appname); if(null == soaServiceApply){return new ResponseVO(DataSignEnum.APPNAME_NOT_APPLY.getCode(),DataSignEnum.APPNAME_NOT_APPLY.getMessage(), null);}SoaAppSecret soaAppSecret = soaAppSecretService.findAppSecretByAppName(appname); if(null == soaAppSecret){return new ResponseVO(DataSignEnum.APPNAME_NOT_EXISTS.getCode(),DataSignEnum.APPNAME_NOT_EXISTS.getMessage(), null);}// 根据参数重新生成新的签名sign(因为sign不能认为是业务参数，故将sign从map中移除后再加密) resultParamMap.remove("sign");resultParamMap.put("token", soaAppSecret.getToken());String sign = MD5Utils.paramString(resultParamMap);// 根据应用名获取应用名对应的秘钥（目的是和url请求的参数一起进行签名认证） if (!StringUtils.equals(sign, reqSign)) {return new ResponseVO(DataSignEnum.SIGN_NOT_MATCH.getCode(), DataSignEnum.SIGN_NOT_MATCH.getMessage(), null);}}// 执行被拦截的方法，切记，如果此方法不调用，则被拦截的方法不会被执行。 return mi.proceed();}/** * 数据签名枚举* * @author Administrator */public enum DataSignEnum {SIGN_NOT_NULL(2001, "签名不能为空."),SIGN_NOT_MATCH(2002, "签名不匹配，传递的数据被篡改过."),APPNAME_NOT_NULL(2003, "应用名不能为空."),APPNAME_NOT_EXISTS(2004, "应用名不存在."),APPNAME_NOT_APPLY(2005, "当前应用没有权限访问此服务，请联系管理员进行服务申请.");// 成员变量 private int code; // 状态码 private String message; // 返回消息 // 构造方法 private DataSignEnum(int code, String message) {this.code = code; this.message = message;}public int getCode() {return code;}public void setCode(int code) {this.code = code;}public String getMessage() {return message;}public void setMessage(String message) {this.message = message;}}}
+
+# 到此结束！！ #
+ *  **原文作者：** 猿之家
+ *  **原文链接：** https://www.toutiao.com/item/6484050242500035085/
+ *  **版权声明：** 本博客所有文章除特别声明外，均采用 [CC BY-NC-SA 4.0][] 许可协议。转载请注明出处。
