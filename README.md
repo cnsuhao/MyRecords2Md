@@ -1,0 +1,2 @@
+# MyRecords2Md
+博客markdown文件备份记录，因hexo超1200文件就会堆溢出，故这里存放所有markdown文件，博客仅保留精选博文。
